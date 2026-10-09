@@ -14,9 +14,8 @@
       </header>
 
       <label id="drop-zone" class="drop-zone" tabindex="0">
-        <input id="file-input" type="file" accept="image/*" hidden />
-        <img id="preview" alt="Selected image preview" hidden />
-        <span id="drop-hint">Drop an image here, click to choose one, or paste with <kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>V</kbd></span>
+        <input id="file-input" type="file" accept="image/*" multiple hidden />
+        <span>Drop images here, click to choose several, or paste with <kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>V</kbd></span>
       </label>
 
       <div id="status" class="status" hidden>
@@ -27,15 +26,33 @@
         <progress id="progress" max="1" value="0"></progress>
       </div>
 
-      <section class="output">
-        <div class="output-header">
-          <h2>Text</h2>
+      <section class="results">
+        <div class="results-header">
+          <h2>Results <span id="result-count" class="count"></span></h2>
           <div class="actions">
-            <button id="copy-button" type="button" disabled>Copy</button>
+            <button id="copy-all-button" type="button" disabled>Copy all</button>
             <button id="download-button" type="button" disabled>Download .txt</button>
+            <button id="clear-button" type="button" disabled>Clear</button>
           </div>
         </div>
-        <textarea id="output" spellcheck="false" placeholder="Recognised text will appear here"></textarea>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th class="col-index">#</th>
+                <th class="col-image">Image</th>
+                <th>File</th>
+                <th class="col-status">Status</th>
+                <th>Text</th>
+              </tr>
+            </thead>
+            <tbody id="results-body">
+              <tr class="empty-row">
+                <td colspan="5">No images yet</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
     </main>
     <script type="module" src="/src/main.ts"></script>

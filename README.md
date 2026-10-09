@@ -4,9 +4,9 @@ A static web app that extracts Vietnamese text from scans and screenshots. OCR r
 
 ## Usage
 
-Drop an image, click to pick one, or paste a screenshot with ⌘/Ctrl+V. The recognised text appears in an editable box with **Copy** and **Download .txt** buttons.
+Drop images, click to pick several at once, or paste screenshots with ⌘/Ctrl+V. Each image becomes a row in the results table (thumbnail, file name, status, recognised text), and the file name and text cells each have their own **Copy** button. **Copy all** and **Download .txt** combine every result under a `=== file name ===` header.
 
-The first run downloads the Tesseract core and the Vietnamese model (`vie.traineddata`, a few MB) from jsDelivr. The browser caches them, and later images in the same session reuse the loaded worker.
+Images are processed one at a time in a queue. Files added mid-batch join the queue. The first image downloads the Tesseract core and the Vietnamese model (`vie.traineddata`, a few MB) from jsDelivr. The browser caches them, and later images reuse the loaded worker.
 
 ## Development
 
@@ -22,7 +22,7 @@ Source:
 
 - `src/ocr.ts`: lazily created, reused Tesseract worker
 - `src/preprocess.ts`: upscales small images (screenshots) 2x before OCR
-- `src/main.ts`: file picker, drag-and-drop, paste, progress and output
+- `src/main.ts`: file picker, drag-and-drop, paste, OCR queue and results table
 
 ## Deploying to GitHub Pages
 

@@ -10,15 +10,15 @@ function byId<T extends HTMLElement>(id: string): T {
 
 const dropZone = byId<HTMLLabelElement>('drop-zone')
 const fileInput = byId<HTMLInputElement>('file-input')
-const preview = byId<HTMLImageElement>('preview')
-const dropHint = byId<HTMLSpanElement>('drop-hint')
 const status = byId<HTMLDivElement>('status')
 const statusText = byId<HTMLSpanElement>('status-text')
 const statusPercent = byId<HTMLSpanElement>('status-percent')
 const progress = byId<HTMLProgressElement>('progress')
-const output = byId<HTMLTextAreaElement>('output')
-const copyButton = byId<HTMLButtonElement>('copy-button')
+const resultsBody = byId<HTMLTableSectionElement>('results-body')
+const resultCount = byId<HTMLSpanElement>('result-count')
+const copyAllButton = byId<HTMLButtonElement>('copy-all-button')
 const downloadButton = byId<HTMLButtonElement>('download-button')
+const clearButton = byId<HTMLButtonElement>('clear-button')
 
 // Human-readable labels for Tesseract's logger statuses.
 const STATUS_LABELS: Record<string, string> = {
@@ -29,8 +29,21 @@ const STATUS_LABELS: Record<string, string> = {
   'recognizing text': 'Recognising text…',
 }
 
-let busy = false
-let previewUrl: string | null = null
+type JobState = 'queued' | 'running' | 'done' | 'failed'
+
+interface Job {
+  name: string
+  previewUrl: string
+  state: JobState
+  text: string
+  row: HTMLTableRowElement
+  statusCell: HTMLTableCellElement
+  textCell: HTMLTableCellElement
+}
+
+const jobs: Job[] = []
+let processing = false
+let pastedCount = 0
 
 function showStatus(text: string, value?: number): void {
   status.hidden = false
@@ -44,11 +57,6 @@ function showStatus(text: string, value?: number): void {
   }
 }
 
-function setResult(text: string): void {
-  output.value = text
-  copyButton.disabled = downloadButton.disabled = text.length === 0
-}
-
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image()
@@ -58,42 +66,174 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   })
 }
 
-async function handleFile(file: File): Promise<void> {
-  if (busy) return
-  if (!file.type.startsWith('image/')) {
-    showStatus(`Unsupported file type: ${file.type || 'unknown'}`, 0)
-    return
-  }
-
-  busy = true
-  dropZone.classList.add('busy')
-  if (previewUrl) URL.revokeObjectURL(previewUrl)
-  previewUrl = URL.createObjectURL(file)
-  preview.src = previewUrl
-  preview.hidden = false
-  dropHint.hidden = true
-  setResult('')
-  showStatus('Starting…')
-
+// The async Clipboard API can be blocked (permissions policy, embedded frames),
+// so fall back to the legacy selection-based copy.
+async function copyText(text: string): Promise<boolean> {
   try {
-    const image = await loadImage(previewUrl)
-    const text = await recognize(preprocess(image), (tesseractStatus, value) => {
-      showStatus(STATUS_LABELS[tesseractStatus] ?? tesseractStatus, value)
-    })
-    setResult(text)
-    showStatus(text ? 'Done' : 'Done — no text found', 1)
-  } catch (error) {
-    console.error(error)
-    showStatus(`Failed: ${error instanceof Error ? error.message : String(error)}`, 0)
-  } finally {
-    busy = false
-    dropZone.classList.remove('busy')
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.append(textarea)
+    textarea.select()
+    const copied = document.execCommand('copy')
+    textarea.remove()
+    return copied
   }
 }
 
+function bindCopy(button: HTMLButtonElement, getText: () => string): void {
+  const label = button.textContent ?? 'Copy'
+  button.addEventListener('click', async () => {
+    button.textContent = (await copyText(getText())) ? 'Copied' : 'Copy failed'
+    setTimeout(() => (button.textContent = label), 1500)
+  })
+}
+
+function createCopyButton(getText: () => string): HTMLButtonElement {
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.className = 'copy-button'
+  button.textContent = 'Copy'
+  bindCopy(button, getText)
+  return button
+}
+
+// `label` mirrors the column header so cells can stack as labelled cards on narrow screens.
+function createCell(row: HTMLTableRowElement, className: string, label: string): HTMLTableCellElement {
+  const cell = row.insertCell()
+  cell.className = className
+  cell.dataset.label = label
+  return cell
+}
+
+function createCopyableCell(row: HTMLTableRowElement, text: string, className: string, label: string): HTMLTableCellElement {
+  const cell = createCell(row, className, label)
+  const content = document.createElement('div')
+  content.className = 'cell-content'
+  const value = document.createElement('span')
+  value.className = 'cell-value'
+  value.textContent = text
+  content.append(value, createCopyButton(() => value.textContent ?? ''))
+  cell.append(content)
+  return cell
+}
+
+function setCellText(cell: HTMLTableCellElement, text: string): void {
+  const value = cell.querySelector<HTMLSpanElement>('.cell-value')
+  if (value) value.textContent = text
+}
+
+function setJobState(job: Job, state: JobState, label: string): void {
+  job.state = state
+  job.row.dataset.state = state
+  job.statusCell.textContent = label
+}
+
+function updateSummary(): void {
+  const done = jobs.filter((job) => job.state === 'done' || job.state === 'failed').length
+  resultCount.textContent = jobs.length ? `(${done}/${jobs.length})` : ''
+  const hasText = jobs.some((job) => job.text)
+  copyAllButton.disabled = downloadButton.disabled = !hasText
+  clearButton.disabled = jobs.length === 0 || processing
+}
+
+function addJob(file: File): Job {
+  const name = file.name && file.name !== 'image.png' ? file.name : `pasted-${++pastedCount}.png`
+  const previewUrl = URL.createObjectURL(file)
+
+  resultsBody.querySelector('.empty-row')?.remove()
+  const row = resultsBody.insertRow()
+
+  createCell(row, 'col-index', '#').textContent = String(jobs.length + 1)
+
+  const imageCell = createCell(row, 'col-image', 'Image')
+  const thumbnail = document.createElement('img')
+  thumbnail.src = previewUrl
+  thumbnail.alt = name
+  thumbnail.loading = 'lazy'
+  imageCell.append(thumbnail)
+
+  createCopyableCell(row, name, 'col-file', 'File')
+  const statusCell = createCell(row, 'col-status', 'Status')
+  const textCell = createCopyableCell(row, '', 'col-text', 'Text')
+
+  const job: Job = { name, previewUrl, state: 'queued', text: '', row, statusCell, textCell }
+  setJobState(job, 'queued', 'Queued')
+  jobs.push(job)
+  return job
+}
+
+async function runJob(job: Job, position: number, total: number): Promise<void> {
+  setJobState(job, 'running', 'Starting…')
+  const prefix = total > 1 ? `[${position}/${total}] ` : ''
+  try {
+    const image = await loadImage(job.previewUrl)
+    job.text = await recognize(preprocess(image), (tesseractStatus, value) => {
+      const label = STATUS_LABELS[tesseractStatus] ?? tesseractStatus
+      showStatus(`${prefix}${job.name}: ${label}`, value)
+      if (tesseractStatus === 'recognizing text') job.statusCell.textContent = `${Math.round(value * 100)}%`
+    })
+    setCellText(job.textCell, job.text)
+    setJobState(job, 'done', job.text ? 'Done' : 'No text found')
+  } catch (error) {
+    console.error(error)
+    setJobState(job, 'failed', `Failed: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+// Jobs run one at a time on the shared worker; files added mid-batch join the queue.
+async function processQueue(): Promise<void> {
+  if (processing) return
+  processing = true
+  updateSummary()
+  dropZone.classList.add('busy')
+
+  let job: Job | undefined
+  while ((job = jobs.find((candidate) => candidate.state === 'queued'))) {
+    await runJob(job, jobs.indexOf(job) + 1, jobs.length)
+    updateSummary()
+  }
+
+  processing = false
+  dropZone.classList.remove('busy')
+  const failed = jobs.filter((candidate) => candidate.state === 'failed').length
+  showStatus(failed ? `Done — ${failed} failed` : 'Done', 1)
+  updateSummary()
+}
+
+function handleFiles(files: FileList | File[]): void {
+  const images = Array.from(files).filter((file) => file.type.startsWith('image/'))
+  if (images.length === 0) {
+    showStatus('No image files found', 0)
+    return
+  }
+  images.forEach(addJob)
+  updateSummary()
+  void processQueue()
+}
+
+function clearResults(): void {
+  if (processing) return
+  jobs.forEach((job) => URL.revokeObjectURL(job.previewUrl))
+  jobs.length = 0
+  resultsBody.innerHTML = '<tr class="empty-row"><td colspan="5">No images yet</td></tr>'
+  status.hidden = true
+  updateSummary()
+}
+
+function combinedText(): string {
+  return jobs
+    .filter((job) => job.text)
+    .map((job) => `=== ${job.name} ===\n${job.text}`)
+    .join('\n\n')
+}
+
 fileInput.addEventListener('change', () => {
-  const file = fileInput.files?.[0]
-  if (file) void handleFile(file)
+  if (fileInput.files) handleFiles(fileInput.files)
   fileInput.value = ''
 })
 
@@ -112,26 +252,21 @@ dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragging
 dropZone.addEventListener('drop', (event) => {
   event.preventDefault()
   dropZone.classList.remove('dragging')
-  const file = event.dataTransfer?.files[0]
-  if (file) void handleFile(file)
+  if (event.dataTransfer) handleFiles(event.dataTransfer.files)
 })
 
 document.addEventListener('paste', (event) => {
-  const file = Array.from(event.clipboardData?.files ?? []).find((f) => f.type.startsWith('image/'))
-  if (file) {
+  const files = Array.from(event.clipboardData?.files ?? []).filter((file) => file.type.startsWith('image/'))
+  if (files.length) {
     event.preventDefault()
-    void handleFile(file)
+    handleFiles(files)
   }
 })
 
-copyButton.addEventListener('click', async () => {
-  await navigator.clipboard.writeText(output.value)
-  copyButton.textContent = 'Copied'
-  setTimeout(() => (copyButton.textContent = 'Copy'), 1500)
-})
+bindCopy(copyAllButton, combinedText)
 
 downloadButton.addEventListener('click', () => {
-  const url = URL.createObjectURL(new Blob([output.value], { type: 'text/plain;charset=utf-8' }))
+  const url = URL.createObjectURL(new Blob([combinedText()], { type: 'text/plain;charset=utf-8' }))
   const link = document.createElement('a')
   link.href = url
   link.download = 'ocr.txt'
@@ -139,6 +274,4 @@ downloadButton.addEventListener('click', () => {
   URL.revokeObjectURL(url)
 })
 
-output.addEventListener('input', () => {
-  copyButton.disabled = downloadButton.disabled = output.value.length === 0
-})
+clearButton.addEventListener('click', clearResults)
