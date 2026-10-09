@@ -1,0 +1,27 @@
+{
+  "name": "ocr-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@10.28.1",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0"
+  },
+  "dependencies": {
+    "tesseract.js": "^7.0.0"
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "tesseract.js"
+    ]
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

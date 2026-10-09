@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vietnamese OCR</title>
+  </head>
+  <body>
+    <main class="app">
+      <header>
+        <h1>Vietnamese OCR</h1>
+        <p class="subtitle">Extract text from scans and screenshots. Everything runs in your browser — images are never uploaded.</p>
+      </header>
+
+      <label id="drop-zone" class="drop-zone" tabindex="0">
+        <input id="file-input" type="file" accept="image/*" hidden />
+        <img id="preview" alt="Selected image preview" hidden />
+        <span id="drop-hint">Drop an image here, click to choose one, or paste with <kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>V</kbd></span>
+      </label>
+
+      <div id="status" class="status" hidden>
+        <div class="status-row">
+          <span id="status-text"></span>
+          <span id="status-percent"></span>
+        </div>
+        <progress id="progress" max="1" value="0"></progress>
+      </div>
+
+      <section class="output">
+        <div class="output-header">
+          <h2>Text</h2>
+          <div class="actions">
+            <button id="copy-button" type="button" disabled>Copy</button>
+            <button id="download-button" type="button" disabled>Download .txt</button>
+          </div>
+        </div>
+        <textarea id="output" spellcheck="false" placeholder="Recognised text will appear here"></textarea>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
