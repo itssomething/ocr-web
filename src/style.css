@@ -178,15 +178,23 @@ tbody tr:last-child td {
 }
 
 .col-image {
-  width: 96px;
+  width: 120px;
 }
 
 .col-image img {
   display: block;
-  max-width: 96px;
+  max-width: 120px;
   max-height: 72px;
   border: 1px solid var(--border);
   border-radius: 4px;
+  cursor: zoom-in;
+}
+
+.compare-button {
+  margin-top: 6px;
+  padding: 2px 8px;
+  font-size: 0.78rem;
+  line-height: 1.3;
 }
 
 td.col-file {
@@ -253,6 +261,139 @@ button:hover:not(:disabled) {
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.compare-dialog {
+  width: min(1280px, calc(100vw - 32px));
+  height: min(860px, calc(100vh - 32px));
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.25);
+}
+
+.compare-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.compare-dialog::backdrop {
+  background: rgb(0 0 0 / 0.55);
+}
+
+.compare-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.compare-header h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compare-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.compare-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.compare-pane + .compare-pane {
+  border-left: 1px solid var(--border);
+}
+
+.pane-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 16px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.pane-toolbar small {
+  font-weight: normal;
+}
+
+.pane-toolbar button {
+  padding: 2px 10px;
+  font-size: 0.85rem;
+}
+
+#zoom-fit {
+  min-width: 76px;
+}
+
+.compare-image-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 16px 16px;
+}
+
+.compare-image-wrap img {
+  display: block;
+  max-width: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fff;
+}
+
+/* Fit mode fills the pane width, so small screenshots are enlarged too; tall images scroll. */
+.compare-image-wrap.fit img {
+  width: 100%;
+}
+
+#compare-text {
+  flex: 1;
+  min-height: 0;
+  margin: 0 16px 16px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: 1rem/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
+  resize: none;
+}
+
+@media (max-width: 720px) {
+  .compare-dialog {
+    width: calc(100vw - 16px);
+    height: calc(100vh - 16px);
+  }
+
+  .compare-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+
+  .compare-pane + .compare-pane {
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+
+  .compare-header .actions button {
+    padding: 4px 10px;
+  }
 }
 
 /* Narrow screens: each result row becomes a stacked card instead of a wide table. */

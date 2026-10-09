@@ -19,6 +19,18 @@ const resultCount = byId<HTMLSpanElement>('result-count')
 const copyAllButton = byId<HTMLButtonElement>('copy-all-button')
 const downloadButton = byId<HTMLButtonElement>('download-button')
 const clearButton = byId<HTMLButtonElement>('clear-button')
+const compareDialog = byId<HTMLDialogElement>('compare-dialog')
+const compareTitle = byId<HTMLHeadingElement>('compare-title')
+const comparePrev = byId<HTMLButtonElement>('compare-prev')
+const compareNext = byId<HTMLButtonElement>('compare-next')
+const compareClose = byId<HTMLButtonElement>('compare-close')
+const compareImageWrap = byId<HTMLDivElement>('compare-image-wrap')
+const compareImage = byId<HTMLImageElement>('compare-image')
+const compareText = byId<HTMLTextAreaElement>('compare-text')
+const compareCopy = byId<HTMLButtonElement>('compare-copy')
+const zoomOut = byId<HTMLButtonElement>('zoom-out')
+const zoomFit = byId<HTMLButtonElement>('zoom-fit')
+const zoomIn = byId<HTMLButtonElement>('zoom-in')
 
 // Human-readable labels for Tesseract's logger statuses.
 const STATUS_LABELS: Record<string, string> = {
@@ -39,11 +51,19 @@ interface Job {
   row: HTMLTableRowElement
   statusCell: HTMLTableCellElement
   textCell: HTMLTableCellElement
+  compareButton: HTMLButtonElement
 }
+
+const ZOOM_STEP = 1.25
+const MIN_ZOOM = 0.1
+const MAX_ZOOM = 8
 
 const jobs: Job[] = []
 let processing = false
 let pastedCount = 0
+let comparedJob: Job | null = null
+// null = scale the image to the pane width; a number = scale relative to natural size.
+let zoom: number | null = null
 
 function showStatus(text: string, value?: number): void {
   status.hidden = false
@@ -127,14 +147,20 @@ function setCellText(cell: HTMLTableCellElement, text: string): void {
   if (value) value.textContent = text
 }
 
+function isFinished(job: Job): boolean {
+  return job.state === 'done' || job.state === 'failed'
+}
+
 function setJobState(job: Job, state: JobState, label: string): void {
   job.state = state
   job.row.dataset.state = state
   job.statusCell.textContent = label
+  job.compareButton.disabled = !isFinished(job)
+  if (comparedJob) updateCompareNavigation(comparedJob)
 }
 
 function updateSummary(): void {
-  const done = jobs.filter((job) => job.state === 'done' || job.state === 'failed').length
+  const done = jobs.filter(isFinished).length
   resultCount.textContent = jobs.length ? `(${done}/${jobs.length})` : ''
   const hasText = jobs.some((job) => job.text)
   copyAllButton.disabled = downloadButton.disabled = !hasText
@@ -155,13 +181,21 @@ function addJob(file: File): Job {
   thumbnail.src = previewUrl
   thumbnail.alt = name
   thumbnail.loading = 'lazy'
-  imageCell.append(thumbnail)
+  const compareButton = document.createElement('button')
+  compareButton.type = 'button'
+  compareButton.className = 'compare-button'
+  compareButton.textContent = 'Enlarge to compare'
+  imageCell.append(thumbnail, compareButton)
 
   createCopyableCell(row, name, 'col-file', 'File')
   const statusCell = createCell(row, 'col-status', 'Status')
   const textCell = createCopyableCell(row, '', 'col-text', 'Text')
 
-  const job: Job = { name, previewUrl, state: 'queued', text: '', row, statusCell, textCell }
+  const job: Job = { name, previewUrl, state: 'queued', text: '', row, statusCell, textCell, compareButton }
+  compareButton.addEventListener('click', () => openCompare(job))
+  thumbnail.addEventListener('click', () => {
+    if (isFinished(job)) openCompare(job)
+  })
   setJobState(job, 'queued', 'Queued')
   jobs.push(job)
   return job
@@ -214,6 +248,50 @@ function handleFiles(files: FileList | File[]): void {
   images.forEach(addJob)
   updateSummary()
   void processQueue()
+}
+
+function applyZoom(): void {
+  compareImageWrap.classList.toggle('fit', zoom === null)
+  compareImage.style.width = zoom === null ? '' : `${Math.round(compareImage.naturalWidth * zoom)}px`
+  zoomFit.textContent = zoom === null ? 'Fit width' : `${Math.round(zoom * 100)}%`
+}
+
+function changeZoom(factor: number): void {
+  // Zooming from fit mode starts at the scale the image is currently displayed at.
+  const current = zoom ?? compareImage.clientWidth / compareImage.naturalWidth
+  zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, current * factor))
+  applyZoom()
+}
+
+function finishedJobs(): Job[] {
+  return jobs.filter(isFinished)
+}
+
+function updateCompareNavigation(job: Job): void {
+  const finished = finishedJobs()
+  const index = finished.indexOf(job)
+  comparePrev.disabled = index <= 0
+  compareNext.disabled = index === -1 || index >= finished.length - 1
+}
+
+function openCompare(job: Job): void {
+  comparedJob = job
+  compareTitle.textContent = job.name
+  compareImage.src = job.previewUrl
+  compareImage.alt = job.name
+  compareText.value = job.text
+  zoom = null
+  applyZoom()
+  updateCompareNavigation(job)
+  if (!compareDialog.open) compareDialog.showModal()
+  compareImageWrap.scrollTo(0, 0)
+}
+
+function stepCompare(offset: number): void {
+  if (!comparedJob) return
+  const finished = finishedJobs()
+  const next = finished[finished.indexOf(comparedJob) + offset]
+  if (next) openCompare(next)
 }
 
 function clearResults(): void {
@@ -275,3 +353,27 @@ downloadButton.addEventListener('click', () => {
 })
 
 clearButton.addEventListener('click', clearResults)
+
+compareText.addEventListener('input', () => {
+  if (!comparedJob) return
+  comparedJob.text = compareText.value
+  setCellText(comparedJob.textCell, comparedJob.text)
+  updateSummary()
+})
+
+bindCopy(compareCopy, () => compareText.value)
+comparePrev.addEventListener('click', () => stepCompare(-1))
+compareNext.addEventListener('click', () => stepCompare(1))
+compareClose.addEventListener('click', () => compareDialog.close())
+compareDialog.addEventListener('close', () => (comparedJob = null))
+// Clicking the backdrop (the dialog element itself, outside its content) closes it.
+compareDialog.addEventListener('click', (event) => {
+  if (event.target === compareDialog) compareDialog.close()
+})
+compareImage.addEventListener('load', applyZoom)
+zoomIn.addEventListener('click', () => changeZoom(ZOOM_STEP))
+zoomOut.addEventListener('click', () => changeZoom(1 / ZOOM_STEP))
+zoomFit.addEventListener('click', () => {
+  zoom = null
+  applyZoom()
+})

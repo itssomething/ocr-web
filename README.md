@@ -6,6 +6,8 @@ A static web app that extracts Vietnamese text from scans and screenshots. OCR r
 
 Drop images, click to pick several at once, or paste screenshots with ⌘/Ctrl+V. Each image becomes a row in the results table (thumbnail, file name, status, recognised text), and the file name and text cells each have their own **Copy** button. **Copy all** and **Download .txt** combine every result under a `=== file name ===` header.
 
+**Enlarge to compare** (or clicking a thumbnail) opens a side-by-side view: the image on the left (fit to width, or zoom with −/+) and the text on the right. Use it to check the OCR against the original and copy by hand. The text is editable there, and corrections flow back into the table, **Copy all** and the download. **Prev**/**Next** step through the batch, and Esc or a click outside closes it.
+
 Images are processed one at a time in a queue. Files added mid-batch join the queue. The first image downloads the Tesseract core and the Vietnamese model (`vie.traineddata`, a few MB) from jsDelivr. The browser caches them, and later images reuse the loaded worker.
 
 ## Development
