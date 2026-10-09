@@ -369,10 +369,15 @@ button:disabled {
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--bg);
+  background: var(--surface);
   color: var(--text);
   font: 1rem/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
   resize: none;
+}
+
+#compare-text:focus {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent-soft);
 }
 
 @media (max-width: 720px) {
